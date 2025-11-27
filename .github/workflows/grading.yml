@@ -19,12 +19,13 @@ jobs:
           
           SCORE=0
           FEEDBACK=""
+          INPUT_FILE="fruits.txt"
+          OUTPUT_FILE="fruit_info.txt"
+          EXPECTED_OUTPUT_RAW="expected_output.txt"
           
-          # 함수: 공백, 탭, 줄바꿈을 제거하고 비교
+          # 함수: 공백, 탭, 줄바꿈을 제거하고 비교 (대소문자 무시를 위해 소문자로 통일)
           normalize_output() {
-            # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
-            # 공백, 탭, CR, LF 모두 제거
-            tr -d '[:space:]\r\n' < "$1" | tr '[:upper:]' '[:lower:]' # 대소문자 무시 추가
+            tr -d '[:space:]\r\n' < "$1" | tr '[:upper:]' '[:lower:]'
           }
           
           echo "::group::테스트 환경 설정 및 컴파일"
@@ -34,43 +35,43 @@ jobs:
             FEEDBACK="[OK] 컴파일 성공.\n"
             
             # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 ---
-            echo "1,Apple,Red,15000" > fruits.txt
-            echo "2,Banana,Yellow,10000" >> fruits.txt
-            echo "3,Melon,Green,32000" >> fruits.txt
-            echo "4,Grape,Purple,18000" >> fruits.txt
+            echo "1,Apple,Red,15000" > "${INPUT_FILE}"
+            echo "2,Banana,Yellow,10000" >> "${INPUT_FILE}"
+            echo "3,Melon,Green,32000" >> "${INPUT_FILE}"
+            echo "4,Grape,Purple,18000" >> "${INPUT_FILE}"
             
-            # --- 2-A. (추가된 로직) 입력 파일 존재 여부 확인 ---
-            if ! [ -f "fruits.txt" ]; then
+            # --- 2-A. 입력 파일 생성 직후 존재 여부 확인 (요청하신 로직) ---
+            if [ ! -f "${INPUT_FILE}" ]; then
               SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 입력 파일(fruits.txt) 생성 실패 또는 학생 코드에 의해 삭제됨. 채점 불가. (0점)\n"
-              echo "::error::채점 실패: 입력 파일(fruits.txt) 문제."
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} [ERROR] 채점 환경 오류: 입력 파일(${INPUT_FILE}) 생성 실패. 채점 진행 불가. (0점)\n"
+              echo "::error::채점 환경 오류: 입력 파일(${INPUT_FILE})이 없습니다."
               
-              # 최종 점수 및 피드백 전달 후 종료
               echo "score=$SCORE" >> "$GITHUB_OUTPUT"
               echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
               echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
               echo "EOF" >> "$GITHUB_OUTPUT"
               exit 1
             fi
-
+            # -------------------------------------------------------------
+            
             # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 ---
-            echo "offset: 2" > expected_output.txt
-            echo "name: Melon" >> expected_output.txt
-            echo "color: Green" >> expected_output.txt
-            echo "price: 32000" >> expected_output.txt
+            echo "offset: 2" > "${EXPECTED_OUTPUT_RAW}"
+            echo "name: Melon" >> "${EXPECTED_OUTPUT_RAW}"
+            echo "color: Green" >> "${EXPECTED_OUTPUT_RAW}"
+            echo "price: 32000" >> "${EXPECTED_OUTPUT_RAW}"
 
             # --- 4. 프로그램 실행 ---
             ./main
             
             # --- 5. 결과 파일 확인 ---
-            if [ -f "fruit_info.txt" ]; then
+            if [ -f "${OUTPUT_FILE}" ]; then
               
               echo "::endgroup::"
-              echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+              echo "::group::결과 파일 내용 비교 (${OUTPUT_FILE})"
               
               # 정규화된 출력 비교
-              EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
-              ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
+              EXPECTED_NORMALIZED="$(normalize_output "${EXPECTED_OUTPUT_RAW}")"
+              ACTUAL_NORMALIZED="$(normalize_output "${OUTPUT_FILE}")"
               
               # 디버깅을 위해 정규화된 출력 로그에 표시
               echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
@@ -78,19 +79,20 @@ jobs:
               
               if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
                 SCORE=100
-                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
+                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} ${OUTPUT_FILE} 파일 내용 일치! (100점)\n"
               else
                 SCORE=0
-                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
-                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_output.txt)\n"
-                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
+                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${OUTPUT_FILE} 내용이 기대와 다릅니다. (0점)\n"
+                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat "${EXPECTED_OUTPUT_RAW}")\n"
+                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat "${OUTPUT_FILE}")\n"
                 echo "::error::채점 실패: 생성된 파일 내용 불일치."
               fi
               
             else
               SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
-              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${OUTPUT_FILE} 파일이 생성되지 않았습니다. (0점)\n"
+              FEEDBACK="${FEEDBACK}  (힌트: 출력 파일 이름을 정확히 ${OUTPUT_FILE}로 사용했는지 확인하세요.)\n"
+              echo "::error::채점 실패: 결과 파일(${OUTPUT_FILE})이 없습니다."
             fi
             echo "::endgroup::"
 
