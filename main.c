@@ -20,7 +20,7 @@ Fruit fruits[5] = {
 
 // --- 파일 이름 상수 ---
 // 과일 정보를 텍스트 형식으로 저장할 입력 파일
-#define INPUT_FILE "fruit.txt"      
+#define INPUT_FILE "frui.txt"      
 // 가장 비싼 과일 정보를 저장할 출력 파일
 #define OUTPUT_FILE "fruit_info.txt" 
 
@@ -99,7 +99,7 @@ int main() {
     
     // 요구된 출력 형식에 맞춰 정보를 텍스트 파일에 씁니다.
     fprintf(output_fp, "offset: %d\n", max_price_offset);
-    fprintf(output_fp, "name %s\n", most_expensive_fruit.name);
+    fprintf(output_fp, "name: %s\n", most_expensive_fruit.name);
     fprintf(output_fp, "color: %s\n", most_expensive_fruit.color);
     fprintf(output_fp, "price: %d\n", most_expensive_fruit.price);
 
