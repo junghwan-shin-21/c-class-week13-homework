@@ -20,7 +20,7 @@ Fruit fruits[5] = {
 
 // --- 파일 이름 상수 ---
 // 과일 정보를 텍스트 형식으로 저장할 입력 파일
-#define INPUT_FILE "frui.txt"      
+#define INPUT_FILE "fruits.txt"      
 // 가장 비싼 과일 정보를 저장할 출력 파일
 #define OUTPUT_FILE "fruit_info.txt" 
 
