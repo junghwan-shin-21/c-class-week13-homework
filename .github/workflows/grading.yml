@@ -12,6 +12,7 @@ steps:
 
 - name: 채점 스크립트 실행
   id: grading
+  shell: bash
   run: |
     # ANSI 색상 코드 정의
     GREEN='\033[32m'
@@ -40,7 +41,8 @@ steps:
     printf "offset: 2\nname: Melon\ncolor: Green\nprice: 32000\n" > expected_info.txt
 
     # 2. 컴파일 시도
-    if gcc fruit_processor_final_cleaned.c -o $EXECUTABLE 2>/dev/null || gcc $C_FILE -o $EXECUTABLE; then
+    # main.c 또는 fruit_processor_final_cleaned.c 를 시도하며, 오류 메시지는 표시하지 않음
+    if gcc fruit_processor_final_cleaned.c -o $EXECUTABLE 2>/dev/null || gcc $C_FILE -o $EXECUTABLE 2>/dev/null; then
       FEEDBACK="[OK] 컴파일 성공.\n"
       
       # 프로그램 실행 (파일 생성 유도)
@@ -80,14 +82,14 @@ steps:
       else
           SCORE=0
           
-          # 실패 사유 결정: 화일 미생성 > 내용 불일치
+          # 실패 사유 결정: (fruits.txt 미생성 또는 fruit_info.txt 미생성) -> fruit_info.txt 내용 불일치 순서
           if [ $FRUITS_EXISTS -eq 0 ] || [ $INFO_EXISTS -eq 0 ]; then
              FINAL_STATUS="화일 미생성"
-             FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: 화일 미생성\n"
           elif [ $INFO_CORRECT -eq 0 ]; then
              FINAL_STATUS="fruit_info.txt 내용 불일치"
-             FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: fruit_info.txt 내용 불일치\n"
           fi
+          
+          FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: ${FINAL_STATUS}\n"
           echo "::error::채점 실패: $FINAL_STATUS"
       fi
       
@@ -96,7 +98,7 @@ steps:
       SCORE=0
       FINAL_STATUS="컴파일 오류"
       FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요."
-      FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: 컴파일 오류\n"
+      FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: ${FINAL_STATUS}\n"
       echo "::error::채점 실패: 컴파일 오류"
     fi
 
