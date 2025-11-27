@@ -1,122 +1,101 @@
-name: C언어 과제 자동 채점
+name: 파일 입출력 프로그램 채점 (Fruit Info)
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+on: [push]
 
 jobs:
   grade:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 저장소 체크아웃
-        uses: actions/checkout@v4
+      - name: 코드 체크아웃
+        uses: actions/checkout@v3
 
-      # -----------------------------------------------------------
-      # 1. 파일 생성: 테스트 데이터 및 기대 출력 파일 생성
-      # -----------------------------------------------------------
-      - name: 테스트 파일 생성 (fruits.txt, expected_output.txt)
-        id: create_files
+      - name: 채점 스크립트 실행
+        id: grading
         run: |
-          # 1. fruits.txt: 학생 코드가 읽어야 할 입력 파일 (하드코딩 방지용 데이터 포함)
-          echo "Apple 1000 5" > fruits.txt
-          echo "Banana 500 10" >> fruits.txt
-          # 하드코딩 방지를 위한 주요 테스트 데이터
-          echo "Melon 5000 2" >> fruits.txt
-          echo "Grapefruit 3500 3" >> fruits.txt
+          # ANSI 색상 코드 정의
+          GREEN='\033[32m'
+          RED='\033[31m'
+          NC='\033[0m'
           
-          # 2. expected_output.txt: 학생 코드가 생성해야 할 정답 파일
-          echo "Fruit Name: Apple, Total Price: 5000" > expected_output.txt
-          echo "Fruit Name: Banana, Total Price: 5000" >> expected_output.txt
-          echo "Fruit Name: Melon, Total Price: 10000" >> expected_output.txt
-          echo "Fruit Name: Grapefruit, Total Price: 10500" >> expected_output.txt
+          SCORE=0
+          FEEDBACK=""
           
-          echo "테스트 파일 생성이 완료되었습니다."
-
-      # -----------------------------------------------------------
-      # 2. 파일 존재 여부 확인 (채점 환경 자체의 안정성 검증)
-      # -----------------------------------------------------------
-      - name: 필수 입력 파일 존재 여부 확인 (fruits.txt)
-        run: |
-          if [ -f fruits.txt ]; then
-            echo "✅ 필수 입력 파일 (fruits.txt)이 성공적으로 생성되었음을 확인했습니다."
-          else
-            echo "❌ 오류: fruits.txt 파일이 존재하지 않습니다. 채점 환경 설정에 문제가 있습니다."
-            exit 1 # 스크립트 오류
-          fi
-
-      # -----------------------------------------------------------
-      # 3. 컴파일
-      # -----------------------------------------------------------
-      - name: C 코드 컴파일
-        id: compile
-        run: |
-          if gcc main.c -o main; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "컴파일 성공"
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "::error::컴파일 실패: 학생의 main.c 파일을 실행 파일로 변환할 수 없습니다."
-            exit 1 # 컴파일 실패 시 즉시 종료
-          fi
-          
-      # -----------------------------------------------------------
-      # 4. 실행 및 출력 파일 생성 확인
-      # -----------------------------------------------------------
-      - name: 프로그램 실행 및 Exit Code 확인
-        id: run
-        run: |
-          # ./main 실행. Exit Code가 0이 아니면 (오류가 발생하면) 즉시 이 단계는 실패 처리됨.
-          if ! ./main; then
-            echo "::error::학생 프로그램 실행 중 오류가 발생했습니다. (Exit Code != 0). 파일 입출력 오류 또는 런타임 오류를 확인하십시오."
-            exit 1
-          fi
-          
-          # 학생 코드가 fruit_info.txt 파일을 생성했는지 확인
-          if [ -f fruit_info.txt ]; then
-            echo "✅ 학생 프로그램이 출력 파일 (fruit_info.txt)을 생성했습니다."
-          else
-            echo "::error::학생 프로그램이 필요한 출력 파일 (fruit_info.txt)을 생성하지 못했습니다."
-            exit 1
-          fi
-
-      # -----------------------------------------------------------
-      # 5. 채점 및 결과 비교
-      # -----------------------------------------------------------
-      - name: 결과 파일 내용 비교 및 채점
-        id: compare
-        run: |
-          # 1. 줄 바꿈 및 공백을 정규화하는 함수 정의
-          normalize() {
-            tr -s ' ' < "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]'
+          # 함수: 공백, 탭, 줄바꿈을 제거하고 비교
+          normalize_output() {
+            # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
+            # 공백, 탭, CR, LF 모두 제거
+            tr -d '[:space:]\r\n' < "$1"
           }
+          
+          echo "::group::테스트 환경 설정 및 컴파일"
+          
+          # --- 1. 컴파일 시도 ---
+          if gcc main.c -o main 2> compile_error.txt; then
+            FEEDBACK="[OK] 컴파일 성공.\n"
+            
+            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (안정화된 echo 사용) ---
+            # NOTE: 과제 내용에 따라 이 입력 데이터는 변경될 수 있습니다.
+            echo "1,Apple,Red,15000" > fruits.txt
+            echo "2,Banana,Yellow,10000" >> fruits.txt
+            echo "3,Melon,Green,32000" >> fruits.txt
+            echo "4,Grape,Purple,18000" >> fruits.txt
+            
+            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 (안정화된 echo 사용) ---
+            echo "offset: 2" > expected_output.txt
+            echo "name: Melon" >> expected_output.txt
+            echo "color: Green" >> expected_output.txt
+            echo "price: 32000" >> expected_output.txt
 
-          # 2. 정규화된 파일 생성
-          normalize "expected_output.txt" > expected_normalized.txt
-          normalize "fruit_info.txt" > student_normalized.txt
+            # --- 4. 프로그램 실행 ---
+            ./main
+            
+            # --- 5. 결과 파일 확인 ---
+            if [ -f "fruit_info.txt" ]; then
+              
+              echo "::endgroup::"
+              echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+              
+              # 정규화된 출력 비교
+              EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
+              ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
+              
+              # 디버깅을 위해 정규화된 출력 로그에 표시
+              echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
+              echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
+              
+              if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
+                SCORE=100
+                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
+              else
+                SCORE=0
+                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
+                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_output.txt)\n"
+                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
+                echo "::error::채점 실패: 생성된 파일 내용 불일치."
+              fi
+              
+            else
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
+              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
+            fi
+            echo "::endgroup::"
 
-          echo "::group::결과 파일 내용 비교 (디버깅용)"
-          echo "[기대 출력 (정규화됨)]:"
-          cat expected_normalized.txt
-          echo "----------------------------------------"
-          echo "[학생 출력 (정규화됨)]:"
-          cat student_normalized.txt
-          echo "::endgroup::"
-
-          # 3. 파일 내용 비교
-          if cmp -s expected_normalized.txt student_normalized.txt; then
-            echo "::notice::✨ 채점 성공: 학생의 출력 결과가 기대하는 결과와 일치합니다."
-            echo "score=100" >> $GITHUB_OUTPUT
           else
-            echo "::error::❌ 채점 실패: 출력 내용이 일치하지 않습니다. 파일 입출력 로직을 확인하세요."
-            echo "score=0" >> $GITHUB_OUTPUT
+            # 컴파일 실패 시
+            SCORE=0
+            FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요.\n"
+            FEEDBACK="${FEEDBACK}  [컴파일 오류 메시지]:\n$(cat compile_error.txt)\n"
+            echo "::error::컴파일 실패. 자세한 내용은 로그를 확인하세요."
           fi
 
-      - name: 최종 점수 표시
-        if: always()
-        run: |
-          echo "## 📈 최종 채점 결과: ${{ steps.compare.outputs.score }}점" >> $GITHUB_STEP_SUMMARY
+          # GitHub Classroom 최종 점수 및 피드백 전달
+          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+          echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          
+          # 점수가 100점이 아니면 GitHub Actions 작업을 실패 처리
+          if [ "$SCORE" -ne 100 ]; then
+             exit 1
+          fi
