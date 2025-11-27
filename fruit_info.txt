@@ -1,4 +1,0 @@
-offset: 2
-name: Melon
-color: Green
-price: 32000
