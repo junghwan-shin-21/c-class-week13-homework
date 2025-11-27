@@ -1,4 +1,4 @@
-name: C 언어 파일 입출력 채점 (fscanf, 최종)
+name: C 언어 파일 입출력 채점 (상세 Pass/Fail)
 
 on: [push]
 
@@ -20,71 +20,95 @@ steps:
 
     SCORE=0
     FEEDBACK=""
+    FINAL_STATUS="FAIL" # 초기 상태
     
-    # 실행 파일 이름 지정 (main.c -> fruit_processor로 컴파일 가정)
+    # 실행 파일 이름 지정 및 상태 플래그 초기화
     C_FILE="main.c" 
     EXECUTABLE="fruit_processor"
+    FRUITS_EXISTS=0
+    INFO_EXISTS=0
+    INFO_CORRECT=0
 
     # 모든 공백 문자(스페이스, 탭, 개행, 캐리지 리턴)를 제거하여 내용만 비교하는 함수
     normalize_output() {
       tr -d ' \t\n\r' < "$1"
     }
     
-    echo "::group::컴파일 및 실행 테스트"
-    # 학생 코드가 main.c 또는 fruit_processor_final_cleaned.c일 수 있으므로 유연하게 처리
+    echo "::group::채점 프로세스"
+    
+    # 1. 예상 fruit_info.txt 내용 정의 (최고가 과일: Melon)
+    printf "offset: 2\nname: Melon\ncolor: Green\nprice: 32000\n" > expected_info.txt
+
+    # 2. 컴파일 시도
     if gcc fruit_processor_final_cleaned.c -o $EXECUTABLE 2>/dev/null || gcc $C_FILE -o $EXECUTABLE; then
       FEEDBACK="[OK] 컴파일 성공.\n"
       
-      # 1. 프로그램 실행. 이 과정에서 fruits.txt와 fruit_info.txt 파일이 생성되어야 합니다.
+      # 프로그램 실행 (파일 생성 유도)
       ./$EXECUTABLE
 
-      # 2. fruits.txt 존재 확인 (20점)
+      # 3. 파일 생성 및 내용 검증
+      
+      # 3-1. fruits.txt 존재 확인
       if [ -f "fruits.txt" ]; then
-          SCORE=$((SCORE + 20))
-          FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruits.txt 파일 생성 확인. (+20점)\n"
+          FRUITS_EXISTS=1
+          FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruits.txt 파일 생성 확인.\n"
       else
-          FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruits.txt 파일이 생성되지 않았습니다. (+0점)\n"
+          FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruits.txt 파일 생성 실패.\n"
       fi
-
-      # 3. fruit_info.txt 존재 및 내용 비교 (80점)
+      
+      # 3-2. fruit_info.txt 존재 확인
       if [ -f "fruit_info.txt" ]; then
-          # 예상 fruit_info.txt 내용 정의 (가장 비싼 과일: Melon, offset: 2)
-          printf "offset: 2\nname: Melon\ncolor: Green\nprice: 32000\n" > expected_info.txt
-          
+          INFO_EXISTS=1
+          # 3-3. fruit_info.txt 내용 비교
           if [[ "$(normalize_output fruit_info.txt)" == "$(normalize_output expected_info.txt)" ]]; then
-              SCORE=$((SCORE + 80))
-              FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 내용이 예상과 완벽히 일치합니다. (+80점)\n"
+              INFO_CORRECT=1
+              FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 내용이 예상과 완벽히 일치합니다.\n"
           else
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용 불일치. (+0점)\n"
-              FEEDBACK="${FEEDBACK}  [기대하는 fruit_info.txt (정규화 전)]:\n$(cat expected_info.txt)\n"
-              FEEDBACK="${FEEDBACK}  [학생/테스트 fruit_info.txt (정규화 전)]:\n$(cat fruit_info.txt)\n"
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용 불일치.\n"
+              FEEDBACK="${FEEDBACK}  [기대하는 내용]:\n$(cat expected_info.txt)\n"
+              FEEDBACK="${FEEDBACK}  [학생 파일 내용]:\n$(cat fruit_info.txt)\n"
           fi
       else
-          FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (+0점)\n"
+          FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일 생성 실패.\n"
       fi
       
-      echo "::endgroup::"
-      
-      # 최종 점수 피드백 요약
-      if [ "$SCORE" -eq 100 ]; then
-          FEEDBACK="${FEEDBACK}\n${GREEN}최종 점수: 100점${NC} - 모든 요구 사항을 충족했습니다.\n"
+      # 4. 최종 Pass/Fail 및 상세 사유 결정
+      if [ $FRUITS_EXISTS -eq 1 ] && [ $INFO_CORRECT -eq 1 ] && [ $INFO_EXISTS -eq 1 ]; then
+          SCORE=100
+          FINAL_STATUS="PASS"
+          FEEDBACK="${FEEDBACK}\n${GREEN}최종 결과: PASS (100점)${NC} - 모든 요구 사항을 충족했습니다.\n"
       else
-          FEEDBACK="${FEEDBACK}\n${RED}최종 점수: ${SCORE}점${NC} - 요구 사항 중 일부가 충족되지 않았습니다.\n"
-          echo "::error::채점 실패: 최종 점수 $SCORE 점."
+          SCORE=0
+          
+          # 실패 사유 결정: 화일 미생성 > 내용 불일치
+          if [ $FRUITS_EXISTS -eq 0 ] || [ $INFO_EXISTS -eq 0 ]; then
+             FINAL_STATUS="화일 미생성"
+             FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: 화일 미생성\n"
+          elif [ $INFO_CORRECT -eq 0 ]; then
+             FINAL_STATUS="fruit_info.txt 내용 불일치"
+             FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: fruit_info.txt 내용 불일치\n"
+          fi
+          echo "::error::채점 실패: $FINAL_STATUS"
       fi
       
     else
+      # 1-1. 컴파일 실패
       SCORE=0
+      FINAL_STATUS="컴파일 오류"
       FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요."
-      echo "::error::컴파일 실패."
+      FEEDBACK="${FEEDBACK}\n${RED}최종 결과: FAIL (0점)${NC} - 실패 사유: 컴파일 오류\n"
+      echo "::error::채점 실패: 컴파일 오류"
     fi
 
+    echo "::endgroup::"
+    
     # GitHub Classroom 최종 점수 및 피드백 전달
     echo "score=$SCORE" >> "$GITHUB_OUTPUT"
     echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
     echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
     echo "EOF" >> "$GITHUB_OUTPUT"
     
+    # FAIL (SCORE=0) 시에만 CI/CD 실패 처리
     if [ "$SCORE" -ne 100 ]; then
         exit 1
     fi
