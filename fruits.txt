@@ -1,0 +1,5 @@
+Apple Red 20000
+Banana Yellow 15000
+Melon Green 32000
+Grape Purple 22000
+Kiwi Brown 19000
