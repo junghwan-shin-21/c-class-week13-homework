@@ -98,7 +98,7 @@ int main() {
     }
     
     // 요구된 출력 형식에 맞춰 정보를 텍스트 파일에 씁니다.
-    fprintf(output_fp, "offset: %d\n", max_price_offset);
+    fprintf(output_fp, "offset: %d\n", max_price_offset-1);
     fprintf(output_fp, "name: %s\n", most_expensive_fruit.name);
     fprintf(output_fp, "color: %s\n", most_expensive_fruit.color);
     fprintf(output_fp, "price: %d\n", most_expensive_fruit.price);
