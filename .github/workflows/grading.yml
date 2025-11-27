@@ -29,31 +29,27 @@ jobs:
           echo "::group::테스트 환경 설정 및 컴파일"
           
           # --- 1. 컴파일 시도 ---
-          # 참고: 사용자 스크린샷을 바탕으로 실행 파일명을 'main'으로 설정합니다.
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="[OK] 컴파일 성공.\n"
             
             # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 ---
-            # NOTE: 과제 내용에 따라 이 입력 데이터는 변경될 수 있습니다.
-            # 가정: 프로그램이 이 파일을 읽고, offset 2에 해당하는 멜론 정보를 fruit_info.txt에 씁니다.
-            cat << EOF > fruits.txt
+            # <<-EOD는 닫는 EOD 앞에 탭이 있어도 허용합니다.
+            cat <<-EOD > fruits.txt
             1,Apple,Red,15000
             2,Banana,Yellow,10000
             3,Melon,Green,32000
             4,Grape,Purple,18000
-            EOF
+EOD
             
             # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 ---
-            # NOTE: 이 내용은 스크린샷의 결과를 기반으로 합니다.
-            cat << EOF > expected_output.txt
+            cat <<-EOD > expected_output.txt
             offset: 2
             name: Melon
             color: Green
             price: 32000
-            EOF
+EOD
 
             # --- 4. 프로그램 실행 ---
-            # 프로그램이 fruits.txt를 읽고 fruit_info.txt를 생성한다고 가정
             ./main
             
             # --- 5. 결과 파일 확인 ---
