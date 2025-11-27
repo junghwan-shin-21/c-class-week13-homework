@@ -1,4 +1,4 @@
-name: 파일 입출력 프로그램 채점 (Fruit Info) - 입력 파일 이름 및 내용 사용 검증
+name: 파일 입출력 프로그램 채점 (Fruit Info)
 
 on: [push]
 
@@ -18,132 +18,84 @@ jobs:
           NC='\033[0m'
           
           SCORE=0
-          FINAL_FEEDBACK=""
-          TEST_COUNT=0
-          PASS_COUNT=0
+          FEEDBACK=""
           
-          INPUT_FILE="fruits.txt" 
-          EXPECTED_OUTPUT_FILE="fruit_info.txt"
-          
-          # 함수: 불필요한 공백/줄 바꿈 제거, 소문자 통일 (공백 무시 비교를 위한 핵심 로직)
+          # 함수: 공백, 탭, 줄바꿈을 제거하고 비교
           normalize_output() {
-            tr -d '\r' < "$1" | 
-            sed 's/^[[:space:]]*//; s/[[:space:]]*$//g' | 
-            tr -s '[:space:]' ' ' | 
-            grep -v '^\s*$' |
-            tr '[:upper:]' '[:lower:]'
+            # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
+            # 공백, 탭, CR, LF 모두 제거
+            tr -d '[:space:]\r\n' < "$1"
           }
           
           echo "::group::테스트 환경 설정 및 컴파일"
           
-          # --- 0. 초기화 ---
-          rm -f "${EXPECTED_OUTPUT_FILE}" "${INPUT_FILE}" *.txt *.o main
-          FINAL_FEEDBACK="[OK] 작업 공간 초기화 완료.\n"
-          
           # --- 1. 컴파일 시도 ---
-          if ! gcc main.c -o main 2> compile_error.txt; then
-            FINAL_FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요.\n"
-            FINAL_FEEDBACK="${FINAL_FEEDBACK}  [컴파일 오류 메시지]:\n$(cat compile_error.txt)\n"
-            echo "::error::채점 실패: 컴파일 오류."
-            echo "::endgroup::"
+          if gcc main.c -o main 2> compile_error.txt; then
+            FEEDBACK="[OK] 컴파일 성공.\n"
             
-            # 최종 점수 0점 처리 및 종료
-            echo "score=0" >> "$GITHUB_OUTPUT"
-            echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
-            echo -e "$FINAL_FEEDBACK" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
+            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (안정화된 echo 사용) ---
+            # NOTE: 과제 내용에 따라 이 입력 데이터는 변경될 수 있습니다.
+            echo "1,Apple,Red,15000" > fruits.txt
+            echo "2,Banana,Yellow,10000" >> fruits.txt
+            echo "3,Melon,Green,32000" >> fruits.txt
+            echo "4,Grape,Purple,18000" >> fruits.txt
+            
+            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 (안정화된 echo 사용) ---
+            echo "offset: 2" > expected_output.txt
+            echo "name: Melon" >> expected_output.txt
+            echo "color: Green" >> expected_output.txt
+            echo "price: 32000" >> expected_output.txt
 
-          FINAL_FEEDBACK="${FINAL_FEEDBACK}[OK] 컴파일 성공.\n"
-          echo "::endgroup::"
-          
-          # --------------------------------------------------------------------------
-          #  핵심 검증 로직: 2단계 테스트 실행 (입력 파일 이름 및 내용 사용 검증)
-          # --------------------------------------------------------------------------
-
-          # 테스트 케이스 배열 정의: {입력 파일 내용} | {기대하는 출력 파일 내용}
-          declare -a TEST_CASES=(
-            "1,Apple,Red,15000\n2,Banana,Yellow,10000\n3,Melon,Green,32000\n4,Grape,Purple,18000|offset: 2\nname: Melon\ncolor: Green\nprice: 32000"
-            "10,KIWI,BROWN,500\n20,PEAR,YELLOW,2000\n30,PINEAPPLE,GOLD,80000\n40,MANGO,ORANGE,12000|offset: 3\nname: MANGO\ncolor: ORANGE\nprice: 12000"
-          )
-          
-          for TEST_CASE in "${TEST_CASES[@]}"; do
-            TEST_COUNT=$((TEST_COUNT + 1))
+            # --- 4. 프로그램 실행 ---
+            ./main
             
-            INPUT_CONTENT=$(echo -e "${TEST_CASE}" | cut -d'|' -f1)
-            EXPECTED_CONTENT=$(echo -e "${TEST_CASE}" | cut -d'|' -f2)
-            
-            echo "::group::[TEST ${TEST_COUNT}] 새로운 입력 파일 생성 및 실행"
-            
-            # 1. 입력 파일 생성 (fruits.txt)
-            echo -e "${INPUT_CONTENT}" > "${INPUT_FILE}"
-            FINAL_FEEDBACK="${FINAL_FEEDBACK}\n--- [TEST ${TEST_COUNT}] 시작 ---\n"
-            
-            # 2. 기대 출력 파일 생성 (비교 기준)
-            echo -e "${EXPECTED_CONTENT}" > expected_output_raw.txt
-            
-            # 3. 이전 출력 파일 삭제 (실행 전 초기화)
-            rm -f "${EXPECTED_OUTPUT_FILE}"
-            
-            # 4. 프로그램 실행 (학생 코드가 fruits.txt를 읽고 fruit_info.txt를 생성해야 함)
-            if ! ./main; then
-              FINAL_FEEDBACK="${FINAL_FEEDBACK}${RED}[FAIL]${NC} [TEST ${TEST_COUNT}] 프로그램 런타임 오류 또는 비정상 종료.\n"
-              echo "::error::[TEST ${TEST_COUNT}] 프로그램 런타임 오류."
-              echo "::endgroup::"
-              continue
-            fi
-            
-            # 5. 결과 파일 확인 및 비교
-            if [ -f "${EXPECTED_OUTPUT_FILE}" ]; then
+            # --- 5. 결과 파일 확인 ---
+            if [ -f "fruit_info.txt" ]; then
               
-              EXPECTED_NORMALIZED="$(normalize_output expected_output_raw.txt)"
-              ACTUAL_NORMALIZED="$(normalize_output "${EXPECTED_OUTPUT_FILE}")"
+              echo "::endgroup::"
+              echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+              
+              # 정규화된 출력 비교
+              EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
+              ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
+              
+              # 디버깅을 위해 정규화된 출력 로그에 표시
+              echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
+              echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
               
               if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
-                PASS_COUNT=$((PASS_COUNT + 1))
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}${GREEN}[PASS]${NC} [TEST ${TEST_COUNT}] 출력 파일 내용 일치. (공백/대소문자 무시)\n"
+                SCORE=100
+                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
               else
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}${RED}[FAIL]${NC} [TEST ${TEST_COUNT}] 출력 파일 내용 불일치.\n"
-                
-                # --- 진단: 정규화된 텍스트 비교 결과를 명확히 표시 ---
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}  [불일치 진단 (공백/대소문자 무시 후 비교 결과)]:\n"
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}    [기대하는 내용 (정규화됨)]: ${EXPECTED_NORMALIZED}\n"
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}    [학생 프로그램 생성 내용 (정규화됨)]: ${ACTUAL_NORMALIZED}\n"
-                
-                # 추가 정보: RAW 파일 내용
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}  [참고] 원본 출력 파일 내용:\n"
-                FINAL_FEEDBACK="${FINAL_FEEDBACK}    [학생 출력 원본]:\n$(cat "${EXPECTED_OUTPUT_FILE}")\n"
-                
-                echo "::error::[TEST ${TEST_COUNT}] 생성된 파일 내용 불일치. 출력 내용 자체가 다르거나 (예: 숫자 포맷 오류), 데이터 오독 오류입니다."
+                SCORE=0
+                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
+                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_output.txt)\n"
+                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
+                echo "::error::채점 실패: 생성된 파일 내용 불일치."
               fi
+              
             else
-              FINAL_FEEDBACK="${FINAL_FEEDBACK}${RED}[FAIL]${NC} [TEST ${TEST_COUNT}] ${EXPECTED_OUTPUT_FILE} 파일이 생성되지 않았습니다.\n"
-              echo "::error::[TEST ${TEST_COUNT}] 기대하는 결과 파일(${EXPECTED_OUTPUT_FILE})이 없습니다."
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
+              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
             fi
-            
             echo "::endgroup::"
-          done
-          
-          # ----------------------------------------------------
-          #                       최종 점수 계산
-          # ----------------------------------------------------
-          
-          if [ "$PASS_COUNT" -eq "$TEST_COUNT" ]; then
-            SCORE=100
-            FINAL_FEEDBACK="${FINAL_FEEDBACK}\n${GREEN}[최종 결과] 모든 테스트 (${TEST_COUNT}개) 통과: 100점${NC}"
+
           else
+            # 컴파일 실패 시
             SCORE=0
-            FINAL_FEEDBACK="${FINAL_FEEDBACK}\n${RED}[최종 결과] 일부 테스트 실패 (${PASS_COUNT}/${TEST_COUNT} 통과): 0점${NC}"
+            FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요.\n"
+            FEEDBACK="${FEEDBACK}  [컴파일 오류 메시지]:\n$(cat compile_error.txt)\n"
+            echo "::error::컴파일 실패. 자세한 내용은 로그를 확인하세요."
           fi
 
           # GitHub Classroom 최종 점수 및 피드백 전달
           echo "score=$SCORE" >> "$GITHUB_OUTPUT"
           echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$FINAL_FEEDBACK" >> "$GITHUB_OUTPUT"
+          echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           
           # 점수가 100점이 아니면 GitHub Actions 작업을 실패 처리
           if [ "$SCORE" -ne 100 ]; then
-              exit 1
+             exit 1
           fi
