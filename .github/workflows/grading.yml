@@ -1,4 +1,4 @@
-name: 파일 입출력 프로그램 채점 (STDOUT -> fruits.txt)
+name: 파일 입출력 프로그램 채점 (Fruit Info)
 
 on: [push]
 
@@ -33,51 +33,64 @@ jobs:
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="[OK] 컴파일 성공.\n"
             
-            # --- 2. [변경] 기대하는 결과 파일 (fruits.txt) 내용 생성 ---
-            # 학생 프로그램이 표준 입력을 받아 fruits.txt에 이 내용을 생성해야 합니다.
-            # 예시: 'apple', 'banana'를 입력받아 파일에 저장하고 마지막에 요약 줄을 추가한다고 가정합니다.
-            echo "apple" > expected_fruits.txt
-            echo "banana" >> expected_fruits.txt
-            echo "Total items processed: 2" >> expected_fruits.txt
+            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (안정화된 echo 사용) ---
+            # 이 파일은 프로그램이 읽어야 할 파일이며, 실행 후에도 존재해야 합니다.
+            echo "1,Apple,Red,15000" > fruits.txt
+            echo "2,Banana,Yellow,10000" >> fruits.txt
+            echo "3,Melon,Green,32000" >> fruits.txt
+            echo "4,Grape,Purple,18000" >> fruits.txt
             
-            # 테스트 전: 혹시 남아있을 수 있는 출력 파일 삭제 (중요)
-            rm -f fruits.txt
+            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 (안정화된 echo 사용) ---
+            echo "offset: 2" > expected_output.txt
+            echo "name: Melon" >> expected_output.txt
+            echo "color: Green" >> expected_output.txt
+            echo "price: 32000" >> expected_output.txt
+
+            # --- 4. 프로그램 실행 ---
+            ./main
             
-            # --- 3. [변경] 프로그램 실행 (표준 입력 파이프 사용) ---
-            # 학생 프로그램이 'apple'과 'banana'를 표준 입력으로 받습니다.
-            echo -e "apple\nbanana" | ./main
-            
-            # --- 4. 결과 파일 확인 (fruits.txt로 변경) ---
-            if [ -f "fruits.txt" ]; then
-              
-              echo "::endgroup::"
-              echo "::group::결과 파일 내용 비교 (fruits.txt)"
-              
-              # 정규화된 출력 비교
-              EXPECTED_NORMALIZED="$(normalize_output expected_fruits.txt)"
-              ACTUAL_NORMALIZED="$(normalize_output fruits.txt)"
-              
-              # 디버깅을 위해 정규화된 출력 로그에 표시
-              echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
-              echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
-              
-              if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
-                SCORE=100
-                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruits.txt 파일 내용 일치! (100점)\n"
-              else
-                SCORE=50
-                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruits.txt 파일 내용이 기대와 다릅니다. (50점)\n"
-                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_fruits.txt)\n"
-                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruits.txt)\n"
-                echo "::error::채점 실패: 생성된 파일 내용 불일치."
-              fi
-              
+            # --- 4.5. [신규 로직] 입력 파일(fruits.txt) 존재 여부 확인 ---
+            # 이 파일이 프로그램 실행 후에도 남아 있는지 확인합니다.
+            if [ ! -f "fruits.txt" ]; then
+                SCORE=0
+                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 입력 파일(fruits.txt)이 프로그램 실행 후 사라졌습니다. 입력 파일을 삭제하지 마세요! (0점)\n"
+                echo "::error::채점 실패: 입력 파일(fruits.txt) 손실."
             else
-              SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruits.txt 파일이 생성되지 않았습니다. (0점)\n"
-              echo "::error::채점 실패: 결과 파일(fruits.txt)이 없습니다."
+                # fruits.txt가 존재할 때만 fruit_info.txt 채점 로직을 실행
+                
+                # --- 5. 결과 파일 확인 (fruit_info.txt) ---
+                if [ -f "fruit_info.txt" ]; then
+                    
+                    echo "::endgroup::"
+                    echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+                    
+                    # 정규화된 출력 비교
+                    EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
+                    ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
+                    
+                    # 디버깅을 위해 정규화된 출력 로그에 표시
+                    echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
+                    echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
+                    
+                    if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
+                        SCORE=100
+                        FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
+                    else
+                        SCORE=0
+                        FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
+                        FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_output.txt)\n"
+                        FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
+                        echo "::error::채점 실패: 생성된 파일 내용 불일치."
+                    fi
+                    
+                else
+                    SCORE=0
+                    FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
+                    echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
+                fi
+                echo "::endgroup::"
             fi
-            echo "::endgroup::"
+            # --- 4.5의 else 블록 종료 ---
 
           else
             # 컴파일 실패 시
