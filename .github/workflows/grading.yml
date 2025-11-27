@@ -23,7 +23,8 @@ jobs:
           # 함수: 공백, 탭, 줄바꿈을 제거하고 비교
           normalize_output() {
             # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
-            tr -d ' \t\n\r' < "$1"
+            # 공백, 탭, CR, LF 모두 제거
+            tr -d '[:space:]\r\n' < "$1"
           }
           
           echo "::group::테스트 환경 설정 및 컴파일"
@@ -32,22 +33,18 @@ jobs:
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="[OK] 컴파일 성공.\n"
             
-            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 ---
-            # <<-EOD는 닫는 EOD 앞에 탭이 있어도 허용합니다.
-            cat <<-EOD > fruits.txt
-            1,Apple,Red,15000
-            2,Banana,Yellow,10000
-            3,Melon,Green,32000
-            4,Grape,Purple,18000
-EOD
+            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (안정화된 echo 사용) ---
+            # NOTE: 과제 내용에 따라 이 입력 데이터는 변경될 수 있습니다.
+            echo "1,Apple,Red,15000" > fruits.txt
+            echo "2,Banana,Yellow,10000" >> fruits.txt
+            echo "3,Melon,Green,32000" >> fruits.txt
+            echo "4,Grape,Purple,18000" >> fruits.txt
             
-            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 ---
-            cat <<-EOD > expected_output.txt
-            offset: 2
-            name: Melon
-            color: Green
-            price: 32000
-EOD
+            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 (안정화된 echo 사용) ---
+            echo "offset: 2" > expected_output.txt
+            echo "name: Melon" >> expected_output.txt
+            echo "color: Green" >> expected_output.txt
+            echo "price: 32000" >> expected_output.txt
 
             # --- 4. 프로그램 실행 ---
             ./main
