@@ -20,6 +20,7 @@ jobs:
           SCORE=0
           FEEDBACK=""
           
+          INPUT_FILE="fruits.txt" 
           EXPECTED_OUTPUT_FILE="fruit_info.txt" # 기대하는 출력 파일 이름 변수화
           
           # 함수: 불필요한 공백과 빈 줄을 제거하고 엄격하게 비교
@@ -37,28 +38,28 @@ jobs:
           
           echo "::group::테스트 환경 설정 및 컴파일"
           
-          # --- 0. 이전 실행 파일 정리 (매우 중요) ---
-          # 이전 실행에서 생성되었을 수 있는 모든 출력 파일을 삭제합니다.
-          rm -f "${EXPECTED_OUTPUT_FILE}" *.txt *.o main
+          # --- 0. 이전 실행 파일 정리 (매우 중요: 잔여 파일 문제 방지) ---
+          rm -f "${EXPECTED_OUTPUT_FILE}" "${INPUT_FILE}" *.txt *.o main
           FEEDBACK="[OK] 작업 공간 초기화 완료.\n"
           
           # --- 1. 컴파일 시도 ---
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="${FEEDBACK}[OK] 컴파일 성공.\n"
             
-            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 및 확인 ---
-            echo "1,Apple,Red,15000" > fruits.txt
-            echo "2,Banana,Yellow,10000" >> fruits.txt
-            echo "3,Melon,Green,32000" >> fruits.txt
-            echo "4,Grape,Purple,18000" >> fruits.txt
+            # --- 2. 테스트용 입력 파일 (${INPUT_FILE}) 생성 ---
+            echo "1,Apple,Red,15000" > "${INPUT_FILE}"
+            echo "2,Banana,Yellow,10000" >> "${INPUT_FILE}"
+            echo "3,Melon,Green,32000" >> "${INPUT_FILE}"
+            echo "4,Grape,Purple,18000" >> "${INPUT_FILE}"
             
-            if [ ! -f "fruits.txt" ]; then
+            # *** 핵심 추가 사항: 입력 파일 생성 확인 ***
+            if [ ! -f "${INPUT_FILE}" ]; then
               SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 테스트 환경 오류: 입력 파일 'fruits.txt' 생성에 실패했습니다. (0점)\n"
-              echo "::error::채점 환경 설정 오류: fruits.txt 파일이 존재하지 않습니다."
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 테스트 환경 오류: 입력 파일 '${INPUT_FILE}' 생성에 실패했습니다. (0점)\n"
+              echo "::error::채점 환경 설정 오류: ${INPUT_FILE} 파일이 존재하지 않습니다."
               echo "::endgroup::"
             else
-              FEEDBACK="${FEEDBACK}[OK] 입력 파일 'fruits.txt' 존재 확인.\n"
+              FEEDBACK="${FEEDBACK}[OK] 입력 파일 '${INPUT_FILE}' 존재 확인 완료.\n"
               
               # --- 3. 기대하는 출력 파일 (expected_output.txt) 내용 생성 ---
               echo "offset: 2" > expected_output.txt
@@ -72,9 +73,9 @@ jobs:
                 FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 프로그램 런타임 오류 또는 비정상 종료 (Exit Code != 0). (0점)\n"
                 echo "::error::채점 실패: 프로그램이 비정상 종료되었습니다."
               else
-                # --- 5. 결과 파일 확인 ---
+                # --- 5. 결과 파일 확인 및 비교 ---
                 
-                # *** 핵심 수정 사항: 파일 이름 체크 강화 ***
+                # 출력 파일 이름 체크 및 존재 여부 확인
                 if [ -f "${EXPECTED_OUTPUT_FILE}" ]; then
                   
                   echo "::endgroup::"
@@ -84,18 +85,15 @@ jobs:
                   EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
                   ACTUAL_NORMALIZED="$(normalize_output "${EXPECTED_OUTPUT_FILE}")"
                   
-                  # 디버깅을 위해 정규화된 출력 로그에 표시
-                  echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
-                  echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
-                  
                   if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
                     SCORE=100
+                    # ** 하드코딩 방지 효과: 입력 파일 내용이 바뀌면 이 기대값도 바뀌므로,
+                    # ** 학생이 fruit_info.txt를 하드코딩할 경우 이 비교에서 실패하게 됩니다.
                     FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} ${EXPECTED_OUTPUT_FILE} 파일 내용 일치! (100점)\n"
                   else
                     SCORE=0
                     FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${EXPECTED_OUTPUT_FILE} 내용이 기대와 다릅니다. (0점)\n"
                     FEEDBACK="${FEEDBACK}  [기대하는 파일 내용 (정규화됨)]: $EXPECTED_NORMALIZED\n"
-                    FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용 (정규화됨)]: $ACTUAL_NORMALIZED\n"
                     FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 원본 파일 내용]:\n$(cat "${EXPECTED_OUTPUT_FILE}")\n"
                     echo "::error::채점 실패: 생성된 파일 내용 불일치."
                   fi
@@ -103,10 +101,10 @@ jobs:
                   echo "::endgroup::"
 
                 else
-                  # 파일 이름 오류 (frui.txt 생성 시 이 메시지가 출력됨)
+                  # 출력 파일 이름/존재 오류 (frui.txt 생성 시 이 메시지가 출력됨)
                   SCORE=0
                   FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${EXPECTED_OUTPUT_FILE} 파일이 생성되지 않았습니다. (0점)\n"
-                  FEEDBACK="${FEEDBACK}  * 학생 프로그램이 파일을 다른 이름(예: frui.txt)으로 저장했는지 확인해 보세요.\n"
+                  FEEDBACK="${FEEDBACK}  * 파일을 제대로 읽고 (${INPUT_FILE}) 결과 파일 (${EXPECTED_OUTPUT_FILE})로 저장했는지 확인하세요.\n"
                   echo "::error::채점 실패: 기대하는 결과 파일(${EXPECTED_OUTPUT_FILE})이 없습니다."
                 fi
               fi
