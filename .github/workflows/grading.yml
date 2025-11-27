@@ -24,7 +24,7 @@ jobs:
           normalize_output() {
             # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
             # 공백, 탭, CR, LF 모두 제거
-            tr -d '[:space:]\r\n' < "$1"
+            tr -d '[:space:]\r\n' < "$1" | tr '[:upper:]' '[:lower:]' # 대소문자 무시 추가
           }
           
           echo "::group::테스트 환경 설정 및 컴파일"
@@ -33,14 +33,27 @@ jobs:
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="[OK] 컴파일 성공.\n"
             
-            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (안정화된 echo 사용) ---
-            # NOTE: 과제 내용에 따라 이 입력 데이터는 변경될 수 있습니다.
+            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 ---
             echo "1,Apple,Red,15000" > fruits.txt
             echo "2,Banana,Yellow,10000" >> fruits.txt
             echo "3,Melon,Green,32000" >> fruits.txt
             echo "4,Grape,Purple,18000" >> fruits.txt
             
-            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 (안정화된 echo 사용) ---
+            # --- 2-A. (추가된 로직) 입력 파일 존재 여부 확인 ---
+            if ! [ -f "fruits.txt" ]; then
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} 입력 파일(fruits.txt) 생성 실패 또는 학생 코드에 의해 삭제됨. 채점 불가. (0점)\n"
+              echo "::error::채점 실패: 입력 파일(fruits.txt) 문제."
+              
+              # 최종 점수 및 피드백 전달 후 종료
+              echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+              echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
+              echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+
+            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 ---
             echo "offset: 2" > expected_output.txt
             echo "name: Melon" >> expected_output.txt
             echo "color: Green" >> expected_output.txt
@@ -97,5 +110,5 @@ jobs:
           
           # 점수가 100점이 아니면 GitHub Actions 작업을 실패 처리
           if [ "$SCORE" -ne 100 ]; then
-             exit 1
+              exit 1
           fi
