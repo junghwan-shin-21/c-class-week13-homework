@@ -1,110 +1,55 @@
-name: 파일 입출력 프로그램 채점 (Fruit Info)
+name: Autograding - Fruit Info
 
-on: [push]
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  grade:
+  autograde:
     runs-on: ubuntu-latest
+
     steps:
-      - name: 코드 체크아웃
-        uses: actions/checkout@v3
+      - name: Checkout student repo
+        uses: actions/checkout@v4
 
-      - name: 채점 스크립트 실행
-        id: grading
+      - name: Install build tools
         run: |
-          # ANSI 색상 코드 정의
-          GREEN='\033[32m'
-          RED='\033[31m'
-          NC='\033[0m'
-          
-          SCORE=0
-          FEEDBACK=""
-          INPUT_FILE="fruits.txt"
-          OUTPUT_FILE="fruit_info.txt"
-          EXPECTED_OUTPUT_RAW="expected_output.txt"
-          
-          # 함수: 공백, 탭, 줄바꿈을 제거하고 비교 (대소문자 무시를 위해 소문자로 통일)
-          normalize_output() {
-            # 윈도우 CRLF(캐리지 리턴)도 제거하여 비교의 정확도를 높임
-            # 공백, 탭, CR, LF 모두 제거, 그리고 대소문자 무시를 위해 소문자로 변환
-            tr -d '[:space:]\r\n' < "$1" | tr '[:upper:]' '[:lower:]'
-          }
-          
-          echo "::group::테스트 환경 설정 및 컴파일"
-          
-          # --- 0. 환경 초기화 및 클린업 (매우 중요: 학생이 커밋한 불필요한 파일 삭제) ---
-          # 학생이 잘못된 이름(예: frui.txt)이나 이전 결과 파일을 커밋한 경우를 방지
-          rm -f "${INPUT_FILE}" "${OUTPUT_FILE}" "${EXPECTED_OUTPUT_RAW}" frui.txt 2>/dev/null
-          
-          # --- 1. 컴파일 시도 ---
-          if gcc main.c -o main 2> compile_error.txt; then
-            FEEDBACK="[OK] 컴파일 성공.\n"
-            
-            # --- 2. 테스트용 입력 파일 (fruits.txt) 생성 (정확한 이름으로) ---
-            echo "1,Apple,Red,15000" > "${INPUT_FILE}"
-            echo "2,Banana,Yellow,10000" >> "${INPUT_FILE}"
-            echo "3,Melon,Green,32000" >> "${INPUT_FILE}"
-            echo "4,Grape,Purple,18000" >> "${INPUT_FILE}"
-            
-            # --- 3. 기대하는 출력 파일 (fruit_info.txt) 내용 생성 ---
-            echo "offset: 2" > "${EXPECTED_OUTPUT_RAW}"
-            echo "name: Melon" >> "${EXPECTED_OUTPUT_RAW}"
-            echo "color: Green" >> "${EXPECTED_OUTPUT_RAW}"
-            echo "price: 32000" >> "${EXPECTED_OUTPUT_RAW}"
+          sudo apt-get update
+          sudo apt-get install -y build-essential
 
-            # --- 4. 프로그램 실행 ---
-            # 여기서 학생의 C 코드가 정확히 ${INPUT_FILE}를 읽어야 합니다.
-            # 만약 학생 코드가 "frui.txt"를 읽으려 하면, 해당 파일은 0. 클린업 단계에서 삭제되었으므로 실패하게 됩니다.
-            ./main
-            
-            # --- 5. 결과 파일 확인 (핵심 채점 로직) ---
-            if [ -f "${OUTPUT_FILE}" ]; then
-              
-              echo "::endgroup::"
-              echo "::group::결과 파일 내용 비교 (${OUTPUT_FILE})"
-              
-              # 정규화된 출력 비교
-              EXPECTED_NORMALIZED="$(normalize_output "${EXPECTED_OUTPUT_RAW}")"
-              ACTUAL_NORMALIZED="$(normalize_output "${OUTPUT_FILE}")"
-              
-              # 디버깅을 위해 정규화된 출력 로그에 표시
-              echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
-              echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
-              
-              if [[ "$ACTUAL_NORMALIZED" == "$EXPECTED_NORMALIZED" ]]; then
-                SCORE=100
-                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} ${OUTPUT_FILE} 파일 내용 일치! (100점)\n"
-              else
-                SCORE=50 # 파일은 생성했으나 내용이 틀린 경우 (부분 점수)
-                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${OUTPUT_FILE} 내용이 기대와 다릅니다. (50점)\n"
-                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat "${EXPECTED_OUTPUT_RAW}")\n"
-                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat "${OUTPUT_FILE}")\n"
-                echo "::error::채점 실패: 생성된 파일 내용 불일치."
-              fi
-              
-            else
-              SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} ${OUTPUT_FILE} 파일이 생성되지 않았습니다. (0점)\n"
-              FEEDBACK="${FEEDBACK}  (힌트: 입력 파일 이름이 ${INPUT_FILE}인지, 출력 파일 이름이 ${OUTPUT_FILE}인지 정확히 확인하세요.)\n"
-              echo "::error::채점 실패: 결과 파일(${OUTPUT_FILE})이 없습니다."
-            fi
-            echo "::endgroup::"
+      - name: Build main.c
+        run: |
+          gcc -Wall -Wextra -std=c11 -o main main.c
 
-          else
-            # 컴파일 실패 시
-            SCORE=0
-            FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요.\n"
-            FEEDBACK="${FEEDBACK}  [컴파일 오류 메시지]:\n$(cat compile_error.txt)\n"
-            echo "::error::컴파일 실패. 자세한 내용은 로그를 확인하세요."
+      - name: Run student program
+        run: |
+          # 학생 프로그램이 내부에서 fruits.txt를 생성하고
+          # fruit_info.txt를 작성해야 합니다.
+          ./main
+
+      - name: Prepare expected fruit_info.txt
+        run: |
+          cat > expected_fruit_info.txt << 'EOF'
+offset: 2
+name: Melon
+color: Green
+price: 32000
+EOF
+
+      - name: Check fruit_info.txt exists
+        run: |
+          if [ ! -f fruit_info.txt ]; then
+            echo "❌ fruit_info.txt 파일이 생성되지 않았습니다."
+            exit 1
           fi
 
-          # GitHub Classroom 최종 점수 및 피드백 전달
-          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
-          echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          
-          # 점수가 100점이 아니면 GitHub Actions 작업을 실패 처리
-          if [ "$SCORE" -ne 100 ]; then
-              exit 1
-          fi
+      - name: Compare output with expected
+        run: |
+          # 형식(공백, 개행)까지 정확히 맞는지 비교
+          diff -u expected_fruit_info.txt fruit_info.txt
+
+      - name: Report success
+        if: ${{ success() }}
+        run: |
+          echo "✅ fruit_info.txt 내용이 정답과 일치합니다."
