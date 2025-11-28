@@ -1,14 +1,3 @@
-name: 파일 입출력 프로그램 채점 (Fruit Info)
-
-on: [push]
-
-jobs:
-  grade:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 코드 체크아웃
-        uses: actions/checkout@v3
-
       - name: 채점 스크립트 실행
         id: grading
         run: |
@@ -19,32 +8,40 @@ jobs:
           SCORE=0
           FEEDBACK=""
 
-          # 공백·탭·줄바꿈 제거 후 비교
           normalize_output() {
             tr -d '[:space:]\r\n' < "$1"
           }
 
           echo "::group::테스트 환경 설정 및 컴파일"
 
-          # 1. 컴파일
           if gcc main.c -o main 2> compile_error.txt; then
             FEEDBACK="[OK] 컴파일 성공.\n"
 
-            # 2. (학생 코드가 fruits.txt를 생성해야 하므로) 여기서는 별도 생성 안 함
-
-            # 3. 기대 출력 파일 생성
+            # 기대 출력 파일 생성
             echo "offset: 2"     > expected_output.txt
             echo "name: Melon"  >> expected_output.txt
             echo "color: Green" >> expected_output.txt
             echo "price: 32000" >> expected_output.txt
 
-            # 4. 프로그램 실행 (학생 코드가 fruits.txt 생성 + fruit_info.txt 작성)
+            # 학생 프로그램 실행 (fruits.txt 생성 + fruit_info.txt 작성 기대)
             ./main
 
-            # 5. 결과 파일 확인
-            if [ -f "fruit_info.txt" ]; then
+            echo "::endgroup::"
+            echo "::group::결과 파일 존재 여부 확인"
+
+            # 1) fruits.txt 존재 확인
+            if [ ! -f "fruits.txt" ]; then
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruits.txt 파일이 생성되지 않았습니다. (0점)\n"
+              echo "::error::채점 실패: 입력 파일(fruits.txt)이 없습니다."
+            # 2) fruit_info.txt 존재 확인
+            elif [ ! -f "fruit_info.txt" ]; then
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
+              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
+            else
               echo "::endgroup::"
-              echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+              echo "::group::fruit_info.txt 내용 비교"
 
               EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
               ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
@@ -54,7 +51,7 @@ jobs:
 
               if [ "$ACTUAL_NORMALIZED" = "$EXPECTED_NORMALIZED" ]; then
                 SCORE=100
-                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
+                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruits.txt 생성 및 fruit_info.txt 파일 내용 일치! (100점)\n"
               else
                 SCORE=0
                 FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
@@ -62,10 +59,6 @@ jobs:
                 FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
                 echo "::error::채점 실패: 생성된 파일 내용 불일치."
               fi
-            else
-              SCORE=0
-              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
-              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
             fi
             echo "::endgroup::"
 
@@ -76,13 +69,11 @@ jobs:
             echo "::error::컴파일 실패. 자세한 내용은 로그를 확인하세요."
           fi
 
-          # GitHub Classroom용 점수·피드백 출력
           echo "score=$SCORE" >> "$GITHUB_OUTPUT"
           echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
           echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-          # 100점 아니면 실패 처리
           if [ "$SCORE" -ne 100 ]; then
             exit 1
           fi
