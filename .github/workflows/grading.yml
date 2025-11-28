@@ -1,52 +1,88 @@
-name: Autograding - Fruit Info
+name: 파일 입출력 프로그램 채점 (Fruit Info)
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push]
 
 jobs:
-  autograde:
+  grade:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout student repo
-        uses: actions/checkout@v4
+      - name: 코드 체크아웃
+        uses: actions/checkout@v3
 
-      - name: Install build tools
+      - name: 채점 스크립트 실행
+        id: grading
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
+          GREEN='\033[32m'
+          RED='\033[31m'
+          NC='\033[0m'
 
-      - name: Build main.c
-        run: |
-          gcc -Wall -Wextra -std=c11 -o main main.c
+          SCORE=0
+          FEEDBACK=""
 
-      - name: Run student program
-        run: |
-          ./main
+          # 공백·탭·줄바꿈 제거 후 비교
+          normalize_output() {
+            tr -d '[:space:]\r\n' < "$1"
+          }
 
-      - name: Prepare expected fruit_info.txt
-        run: |
-          cat > expected_fruit_info.txt << 'EOF'
-offset: 2
-name: Melon
-color: Green
-price: 32000
-EOF
+          echo "::group::테스트 환경 설정 및 컴파일"
 
-      - name: Check fruit_info.txt exists
-        run: |
-          if [ ! -f fruit_info.txt ]; then
-            echo "fruit_info.txt 파일이 생성되지 않았습니다."
-            exit 1
+          # 1. 컴파일
+          if gcc main.c -o main 2> compile_error.txt; then
+            FEEDBACK="[OK] 컴파일 성공.\n"
+
+            # 2. (학생 코드가 fruits.txt를 생성해야 하므로) 여기서는 별도 생성 안 함
+
+            # 3. 기대 출력 파일 생성
+            echo "offset: 2"     > expected_output.txt
+            echo "name: Melon"  >> expected_output.txt
+            echo "color: Green" >> expected_output.txt
+            echo "price: 32000" >> expected_output.txt
+
+            # 4. 프로그램 실행 (학생 코드가 fruits.txt 생성 + fruit_info.txt 작성)
+            ./main
+
+            # 5. 결과 파일 확인
+            if [ -f "fruit_info.txt" ]; then
+              echo "::endgroup::"
+              echo "::group::결과 파일 내용 비교 (fruit_info.txt)"
+
+              EXPECTED_NORMALIZED="$(normalize_output expected_output.txt)"
+              ACTUAL_NORMALIZED="$(normalize_output fruit_info.txt)"
+
+              echo "기대 출력 (정규화됨): $EXPECTED_NORMALIZED"
+              echo "실제 출력 (정규화됨): $ACTUAL_NORMALIZED"
+
+              if [ "$ACTUAL_NORMALIZED" = "$EXPECTED_NORMALIZED" ]; then
+                SCORE=100
+                FEEDBACK="${FEEDBACK}${GREEN}[PASS]${NC} fruit_info.txt 파일 내용 일치! (100점)\n"
+              else
+                SCORE=0
+                FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 내용이 기대와 다릅니다. (0점)\n"
+                FEEDBACK="${FEEDBACK}  [기대하는 파일 내용]:\n$(cat expected_output.txt)\n"
+                FEEDBACK="${FEEDBACK}  [학생 프로그램이 생성한 파일 내용]:\n$(cat fruit_info.txt)\n"
+                echo "::error::채점 실패: 생성된 파일 내용 불일치."
+              fi
+            else
+              SCORE=0
+              FEEDBACK="${FEEDBACK}${RED}[FAIL]${NC} fruit_info.txt 파일이 생성되지 않았습니다. (0점)\n"
+              echo "::error::채점 실패: 결과 파일(fruit_info.txt)이 없습니다."
+            fi
+            echo "::endgroup::"
+
+          else
+            SCORE=0
+            FEEDBACK="${RED}[FAIL]${NC} 컴파일 실패. 코드를 확인하세요.\n"
+            FEEDBACK="${FEEDBACK}  [컴파일 오류 메시지]:\n$(cat compile_error.txt)\n"
+            echo "::error::컴파일 실패. 자세한 내용은 로그를 확인하세요."
           fi
 
-      - name: Compare output with expected
-        run: |
-          diff -u expected_fruit_info.txt fruit_info.txt
+          # GitHub Classroom용 점수·피드백 출력
+          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+          echo "feedback<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$FEEDBACK" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Report success
-        if: ${{ success() }}
-        run: |
-          echo "✅ fruit_info.txt 내용이 정답과 일치합니다."
+          # 100점 아니면 실패 처리
+          if [ "$SCORE" -ne 100 ]; then
+            exit 1
+          fi
