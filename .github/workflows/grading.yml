@@ -24,8 +24,6 @@ jobs:
 
       - name: Run student program
         run: |
-          # 학생 프로그램이 내부에서 fruits.txt를 생성하고
-          # fruit_info.txt를 작성해야 합니다.
           ./main
 
       - name: Prepare expected fruit_info.txt
@@ -40,13 +38,12 @@ EOF
       - name: Check fruit_info.txt exists
         run: |
           if [ ! -f fruit_info.txt ]; then
-            echo "❌ fruit_info.txt 파일이 생성되지 않았습니다."
+            echo "fruit_info.txt 파일이 생성되지 않았습니다."
             exit 1
           fi
 
       - name: Compare output with expected
         run: |
-          # 형식(공백, 개행)까지 정확히 맞는지 비교
           diff -u expected_fruit_info.txt fruit_info.txt
 
       - name: Report success
